@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>FIDO2 Biometric Passkey Portal</title>
+  <style>
+    :root {
+      --bg-deep: #050811;
+      --bg-surface: rgba(15, 23, 42, 0.76);
+      --border-glass: rgba(255, 255, 255, 0.14);
+      --accent-sky: #38bdf8;
+      --accent-indigo: #818cf8;
+      --accent-emerald: #34d399;
+      --accent-amber: #fbbf24;
+      --accent-rose: #f87171;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100dvh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #1e293b 0%, var(--bg-deep) 75%);
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow-x: hidden;
+    }
+
+    .ambient-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(95px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+    .orb-top { width: 260px; height: 260px; background: var(--accent-sky); top: -80px; left: -80px; }
+    .orb-bottom { width: 280px; height: 280px; background: var(--accent-indigo); bottom: -90px; right: -70px; }
+
+    .vault-card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 430px;
+      background: var(--bg-surface);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border-glass);
+      border-radius: 28px;
+      padding: 30px 24px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85);
+    }
+
+    .view { display: none; animation: fadeSlide 0.25s ease; }
+    .view.active { display: block; }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .sensor-badge {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      margin: 0 auto 16px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(129, 140, 248, 0.18));
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-shadow: 0 0 26px rgba(56, 189, 248, 0.22);
+      transition: all 0.3s ease;
+    }
+
+    .sensor-badge.scanning {
+      border-color: var(--accent-sky);
+      box-shadow: 0 0 38px rgba(56, 189, 248, 0.55);
+      transform: scale(1.04);
+    }
+
+    .sensor-badge.verified {
+      background: rgba(52, 211, 153, 0.16);
+      border-color: rgba(52, 211, 153, 0.45);
+      box-shadow: 0 0 36px rgba(52, 211, 153, 0.3);
+    }
+
+    .laser-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-sky);
+      box-shadow: 0 0 12px var(--accent-sky);
+      opacity: 0;
+    }
+
+    .sensor-badge.scanning .laser-line {
+      opacity: 1;
+      animation: scanSweep 1.25s ease-in-out infinite;
+    }
+
+    @keyframes scanSweep {
+      0% { top: 8px; }
+      50% { top: 66px; }
+      100% { top: 8px; }
+    }
+
+    .sensor-badge svg {
+      width: 36px;
+      height: 36px;
+      stroke: var(--accent-sky);
+      fill: none;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .sensor-badge.verified svg { stroke: var(--accent-emerald); }
+
+    .tenant-pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent-sky);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: center;
+      line-height: 1.45;
+      margin-bottom: 22px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 0.74rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      margin-bottom: 7px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 0.98rem;
+      color: var(--text-primary);
+      background: rgba(2, 6, 23, 0.84);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 15px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent-sky);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+    }
+
+    .alert-box {
+      display: none;
+      padding: 13px 15px;
+      border-radius: 14px;
+      font-size: 0.83rem;
+      line-height: 1.45;
+      margin-bottom: 16px;
+      word-break: break-word;
+    }
+    .alert-box.info { display: block; background: rgba(56, 189, 248, 0.13); border: 1px solid rgba(56, 189, 248, 0.35); color: #bae6fd; }
+    .alert-box.success { display: block; background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.38); color: #a7f3d0; }
+    .alert-box.error { display: block; background: rgba(248, 113, 113, 0.14); border: 1px solid rgba(248, 113, 113, 0.38); color: #fecaca; }
+
+    .btn {
+      width: 100%;
+      min-height: 52px;
+      border-radius: 15px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: transform 0.12s, opacity 0.2s;
+      margin-bottom: 10px;
+    }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-sky), var(--accent-indigo));
+      color: #020617;
+      box-shadow: 0 10px 24px -6px rgba(56, 189, 248, 0.45);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-primary);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .btn-magic {
+      display: none;
+      background: rgba(251, 191, 36, 0.16);
+      color: #fde68a;
+      border: 1px solid rgba(251, 191, 36, 0.42);
+    }
+    .btn-magic.visible { display: flex; }
+    .btn-danger {
+      background: rgba(248, 113, 113, 0.16);
+      color: #fecaca;
+      border: 1px solid rgba(248, 113, 113, 0.38);
+    }
+
+    .meta-panel {
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 15px;
+      margin-bottom: 18px;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.81rem;
+      padding: 7px 0;
+    }
+    .meta-row + .meta-row { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+    .meta-key { color: var(--text-secondary); }
+    .meta-val { font-weight: 600; color: var(--text-primary); }
+    .meta-val.ok { color: var(--accent-emerald); }
+
+    .footer-switch {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--accent-sky);
+      font-size: 0.83rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-orb orb-top"></div>
+  <div class="ambient-orb orb-bottom"></div>
+
+  <main class="vault-card">
+    <!-- SCREEN A: REGISTRATION -->
+    <section id="registerView" class="view active">
+      <div style="text-align: center;">
+        <div id="regBadge" class="sensor-badge">
+          <div class="laser-line"></div>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
+            <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
+            <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
+            <path d="M2 12a10 10 0 0 1 18-6"/>
+            <path d="M2 16h.01"/>
+            <path d="M21.8 16c.2-2 .131-5.354 0-6"/>
+            <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/>
+            <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
+            <path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>
+          </svg>
+        </div>
+        <span class="tenant-pill">Step 1 • Passkey Enrollment</span>
+        <h1>Create Passkey</h1>
+        <p class="subtitle">Register your fingerprint or Face ID for passwordless sign-in</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="regIdentityInput">Username, Email, or Mobile (+91...)</label>
+        <input
+          id="regIdentityInput"
+          class="form-input"
+          type="text"
+          placeholder="user@enterprise.com or +919876543210"
+          autocomplete="username webauthn"
+          autocapitalize="none"
+          spellcheck="false"
+        />
+      </div>
+
+      <div id="regBanner" class="alert-box"></div>
+
+      <button id="registerPasskeyBtn" class="btn btn-primary" type="button">
+        <span>Register Passkey (Fingerprint/Face)</span>
+      </button>
+
+      <div class="footer-switch">
+        <button id="goToLoginBtn" class="link-btn" type="button">Already have a Passkey? Go to Login</button>
+      </div>
+    </section>
+
+    <!-- SCREEN B: LOGIN -->
+    <section id="loginView" class="view">
+      <div style="text-align: center;">
+        <div id="loginBadge" class="sensor-badge">
+          <div class="laser-line"></div>
+          <svg viewBox="0 0 24 24">
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <span class="tenant-pill">Step 2 • Biometric Sign-In</span>
+        <h1>Welcome Back</h1>
+        <p class="subtitle">Scan your fingerprint or Face ID to unlock your session</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="loginIdentityInput">Registered Identity</label>
+        <input
+          id="loginIdentityInput"
+          class="form-input"
+          type="text"
+          placeholder="user@enterprise.com or +919876543210"
+          autocomplete="username webauthn"
+          autocapitalize="none"
+          spellcheck="false"
+        />
+      </div>
+
+      <div id="loginBanner" class="alert-box"></div>
+
+      <button id="loginPasskeyBtn" class="btn btn-primary" type="button">
+        <span>Unlock with Biometrics</span>
+      </button>
+
+      <button id="magicLinkFallbackBtn" class="btn btn-magic" type="button">
+        <span>Login via Email Magic Link</span>
+      </button>
+
+      <div class="footer-switch">
+        <button id="goToRegisterBtn" class="link-btn" type="button">Register Another Account</button>
+      </div>
+    </section>
+
+    <!-- SCREEN C: AUTHENTICATED DASHBOARD -->
+    <section id="dashboardView" class="view">
+      <div style="text-align: center;">
+        <div class="sensor-badge verified">
+          <svg viewBox="0 0 24 24">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <span class="tenant-pill">FIDO2 Session Active</span>
+        <h1 id="welcomeTitle">Welcome Back!</h1>
+        <p class="subtitle" style="color: #6ee7b7; font-weight: 600;">Authentication Successful.</p>
+      </div>
+
+      <div class="meta-panel">
+        <div class="meta-row">
+          <span class="meta-key">Account Identity</span>
+          <span id="dashIdentity" class="meta-val">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Access Token (15m)</span>
+          <span class="meta-val ok">Verified &amp; Active</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">RTR Protection</span>
+          <span class="meta-val">20s Grace Window Active</span>
+        </div>
+      </div>
+
+      <div id="dashBanner" class="alert-box"></div>
+
+      <button id="logoutBtn" class="btn btn-danger" type="button">
+        <span>Logout</span>
+      </button>
+
+      <div class="footer-switch">
+        <button id="registerAnotherFromDashBtn" class="link-btn" type="button">Register Another Account</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    const API_BASE = window.location.origin;
+    const TENANT_ID = "store_default";
+
+    const registerView = document.getElementById("registerView");
+    const loginView = document.getElementById("loginView");
+    const dashboardView = document.getElementById("dashboardView");
+
+    const regIdentityInput = document.getElementById("regIdentityInput");
+    const loginIdentityInput = document.getElementById("loginIdentityInput");
+    const regBanner = document.getElementById("regBanner");
+    const loginBanner = document.getElementById("loginBanner");
+    const dashBanner = document.getElementById("dashBanner");
+
+    const regBadge = document.getElementById("regBadge");
+    const loginBadge = document.getElementById("loginBadge");
+
+    const registerPasskeyBtn = document.getElementById("registerPasskeyBtn");
+    const loginPasskeyBtn = document.getElementById("loginPasskeyBtn");
+    const magicLinkFallbackBtn = document.getElementById("magicLinkFallbackBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const goToLoginBtn = document.getElementById("goToLoginBtn");
+    const goToRegisterBtn = document.getElementById("goToRegisterBtn");
+    const registerAnotherFromDashBtn = document.getElementById("registerAnotherFromDashBtn");
+
+    function switchView(target) {
+      registerView.classList.remove("active");
+      loginView.classList.remove("active");
+      dashboardView.classList.remove("active");
+      target.classList.add("active");
+    }
+
+    function setBanner(el, msg, type = "info") {
+      if (!msg) {
+        el.style.display = "none";
+        el.className = "alert-box";
+        return;
+      }
+      el.textContent = msg;
+      el.className = `alert-box ${type}`;
+      el.style.display = "block";
+    }
+
+    function bufferToBase64Url(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+
+    function base64UrlToBuffer(base64url) {
+      const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
+      const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = window.atob(base64);
+      const output = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        output[i] = raw.charCodeAt(i);
+      }
+      return output.buffer;
+    }
+
+    function saveSession(data) {
+      if (data.access_token) sessionStorage.setItem("access_token", data.access_token);
+      if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
+      if (data.credential_token) localStorage.setItem(`cred_${data.email}`, data.credential_token);
+    }
+
+    function getStoredCredentialToken(identity) {
+      return localStorage.getItem(`cred_${identity.toLowerCase()}`) || "";
+    }
+
+    function openDashboard(identity) {
+      document.getElementById("welcomeTitle").textContent = `Welcome Back, ${identity}!`;
+      document.getElementById("dashIdentity").textContent = identity;
+      switchView(dashboardView);
+    }
+
+    registerPasskeyBtn.addEventListener("click", async () => {
+      const identity = regIdentityInput.value.trim().toLowerCase();
+      if (!/^[a-zA-Z0-9_.@+-]{2,64}$/.test(identity)) {
+        setBanner(regBanner, "Please enter a valid username, email, or +91 mobile number.", "error");
+        return;
+      }
+
+      registerPasskeyBtn.disabled = true;
+      regBadge.classList.add("scanning");
+      setBanner(regBanner, "Scanning fingerprint or Face ID...", "info");
+
+      try {
+        const beginRes = await fetch(`${API_BASE}/api/auth/register-begin`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+          body: JSON.stringify({ identity })
+        });
+        const beginData = await beginRes.json();
+        if (!beginRes.ok) throw new Error(beginData.detail || "Registration failed to start.");
+
+        const { challenge_id, publicKey } = beginData;
+        publicKey.challenge = base64UrlToBuffer(publicKey.challenge);
+        publicKey.user.id = base64UrlToBuffer(publicKey.user.id);
+        if (Array.isArray(publicKey.excludeCredentials)) {
+          publicKey.excludeCredentials = publicKey.excludeCredentials.map(c => ({
+            ...c,
+            id: base64UrlToBuffer(c.id)
+          }));
+        }
+
+        const credential = await navigator.credentials.create({ publicKey });
+        if (!credential) throw new Error("No passkey returned from device.");
+
+        const finishRes = await fetch(`${API_BASE}/api/auth/register-finish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+          body: JSON.stringify({
+            identity,
+            challenge_id,
+            credential: {
+              id: credential.id,
+              rawId: bufferToBase64Url(credential.rawId),
+              type: credential.type,
+              response: {
+                clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                attestationObject: bufferToBase64Url(credential.response.attestationObject),
+                transports: typeof credential.response.getTransports === "function"
+                  ? credential.response.getTransports()
+                  : ["internal", "hybrid"]
+              }
+            }
+          })
+        });
+
+        const finishData = await finishRes.json();
+        if (!finishRes.ok) throw new Error(finishData.detail || "Passkey verification failed.");
+
+        saveSession(finishData);
+        setBanner(regBanner, "Passkey registered successfully! Opening login screen...", "success");
+        loginIdentityInput.value = identity;
+
+        setTimeout(() => {
+          setBanner(regBanner, "", "");
+          switchView(loginView);
+        }, 850);
+      } catch (err) {
+        setBanner(regBanner, err.message || String(err), "error");
+      } finally {
+        regBadge.classList.remove("scanning");
+        registerPasskeyBtn.disabled = false;
+      }
+    });
+
+    async function executePasskeyLogin(identity, retryCount = 0) {
+      const credToken = getStoredCredentialToken(identity);
+      const beginRes = await fetch(`${API_BASE}/api/auth/login-begin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+        body: JSON.stringify({ identity, credential_token: credToken })
+      });
+
+      const beginData = await beginRes.json();
+      if (!beginRes.ok) throw new Error(beginData.detail || "Account not found. Please register first.");
+
+      const { challenge_id, publicKey } = beginData;
+      publicKey.challenge = base64UrlToBuffer(publicKey.challenge);
+      if (Array.isArray(publicKey.allowCredentials)) {
+        publicKey.allowCredentials = publicKey.allowCredentials.map(c => ({
+          ...c,
+          id: base64UrlToBuffer(c.id)
+        }));
+      }
+
+      const assertion = await navigator.credentials.get({ publicKey });
+      if (!assertion) throw new Error("Biometric scan returned empty.");
+
+      try {
+        const verifyRes = await fetch(`${API_BASE}/api/auth/login-verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+          body: JSON.stringify({
+            identity,
+            challenge_id,
+            credential_token: credToken,
+            assertion: {
+              id: assertion.id,
+              rawId: bufferToBase64Url(assertion.rawId),
+              type: assertion.type,
+              response: {
+                authenticatorData: bufferToBase64Url(assertion.response.authenticatorData),
+                clientDataJSON: bufferToBase64Url(assertion.response.clientDataJSON),
+                signature: bufferToBase64Url(assertion.response.signature),
+                userHandle: assertion.response.userHandle && assertion.response.userHandle.byteLength > 0
+                  ? bufferToBase64Url(assertion.response.userHandle)
+                  : null
+              }
+            }
+          })
+        });
+
+        const tokens = await verifyRes.json();
+        if (!verifyRes.ok) throw new Error(tokens.detail || "Biometric verification rejected.");
+        saveSession(tokens);
+        return tokens;
+      } catch (netErr) {
+        if (retryCount < 1 && (netErr instanceof TypeError || String(netErr.message).includes("fetch"))) {
+          return executePasskeyLogin(identity, retryCount + 1);
+        }
+        throw netErr;
+      }
+    }
+
+    loginPasskeyBtn.addEventListener("click", async () => {
+      const identity = loginIdentityInput.value.trim().toLowerCase();
+      if (!/^[a-zA-Z0-9_.@+-]{2,64}$/.test(identity)) {
+        setBanner(loginBanner, "Please enter your registered username, email, or mobile.", "error");
+        return;
+      }
+
+      loginPasskeyBtn.disabled = true;
+      loginBadge.classList.add("scanning");
+      setBanner(loginBanner, "Verifying fingerprint / Face ID...", "info");
+
+      try {
+        await executePasskeyLogin(identity);
+        magicLinkFallbackBtn.classList.remove("visible");
+        setBanner(loginBanner, "", "");
+        openDashboard(identity);
+      } catch (err) {
+        magicLinkFallbackBtn.classList.add("visible");
+        if (err && err.name === "NotAllowedError") {
+          setBanner(
+            loginBanner,
+            "Biometric sensor cancelled or unavailable. Tap 'Login via Email Magic Link' below.",
+            "error"
+          );
+        } else {
+          setBanner(loginBanner, err.message || String(err), "error");
+        }
+      } finally {
+        loginBadge.classList.remove("scanning");
+        loginPasskeyBtn.disabled = false;
+      }
+    });
+
+    magicLinkFallbackBtn.addEventListener("click", async () => {
+      const identity = loginIdentityInput.value.trim().toLowerCase();
+      if (!identity) {
+        setBanner(loginBanner, "Enter your identity above to receive a Magic Link.", "error");
+        return;
+      }
+
+      magicLinkFallbackBtn.disabled = true;
+      setBanner(loginBanner, "Generating single-use recovery Magic Link...", "info");
+
+      try {
+        const res = await fetch(`${API_BASE}/api/recovery/request-magic-link`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+          body: JSON.stringify({ identity })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Magic Link request failed.");
+
+        if (data.magic_token) {
+          const verifyRes = await fetch(`${API_BASE}/api/recovery/verify-magic-link`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+            body: JSON.stringify({ magic_token: data.magic_token })
+          });
+          const session = await verifyRes.json();
+          if (verifyRes.ok) {
+            saveSession(session);
+            setBanner(loginBanner, "", "");
+            openDashboard(identity);
+            return;
+          }
+        }
+        setBanner(loginBanner, data.message || "Magic Link dispatched.", "success");
+      } catch (err) {
+        setBanner(loginBanner, err.message || String(err), "error");
+      } finally {
+        magicLinkFallbackBtn.disabled = false;
+      }
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await fetch(`${API_BASE}/api/auth/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": TENANT_ID },
+          body: JSON.stringify({ refresh_token: localStorage.getItem("refresh_token") || "" })
+        });
+      } catch (_e) {}
+      sessionStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      setBanner(loginBanner, "You have been securely logged out.", "info");
+      switchView(loginView);
+    });
+
+    goToLoginBtn.addEventListener("click", () => {
+      setBanner(regBanner, "", "");
+      if (regIdentityInput.value.trim()) loginIdentityInput.value = regIdentityInput.value.trim();
+      switchView(loginView);
+    });
+
+    goToRegisterBtn.addEventListener("click", () => {
+      setBanner(loginBanner, "", "");
+      regIdentityInput.value = "";
+      switchView(registerView);
+    });
+
+    registerAnotherFromDashBtn.addEventListener("click", () => {
+      sessionStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      regIdentityInput.value = "";
+      loginIdentityInput.value = "";
+      setBanner(regBanner, "", "");
+      switchView(registerView);
+    });
+  </script>
+</body>
+</html>
